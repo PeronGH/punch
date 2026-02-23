@@ -51,33 +51,21 @@ Behavior:
 
 Multiple mappings are allowed in a single invocation and share the same underlying connection to the remote peer.
 
-## Wire Protocol
+## Forwarding Behavior
 
-All traffic between two peers flows over a single QUIC connection negotiated with ALPN identifier `punch/0`.
-
-Every QUIC stream and datagram begins with a 2-byte port number in network byte order (big-endian). The server uses this port number to route traffic to the corresponding local service.
+All traffic between two peers flows over a single connection.
 
 ### TCP
 
-Each TCP connection maps to one QUIC bidirectional stream.
+Each proxied TCP connection is an independent bidirectional byte stream. The server connects to `127.0.0.1:<port>` and copies bytes in both directions. TCP FIN in either direction closes the corresponding write side.
 
-1. The client opens a bidirectional stream and writes the 2-byte port number.
-2. The server reads the port number, validates it against the expose list, and opens a TCP connection to `127.0.0.1:<port>`.
-3. Bytes flow bidirectionally between the QUIC stream and the TCP connection.
-4. TCP FIN in either direction maps to finishing the corresponding QUIC send stream.
-
-If the port is not in the expose list or the local TCP connection fails, the server must reset the stream.
+If the port is not in the expose list or the local TCP connection fails, the stream is terminated.
 
 ### UDP
 
-Each UDP packet maps to one QUIC datagram.
+Each proxied UDP packet is delivered independently. UDP semantics (unreliable, unordered) are preserved. Replies from the local service are routed back to the correct originating sender on the client side.
 
-1. The sender prepends the 2-byte port number to the UDP payload and sends it as a single QUIC datagram.
-2. The receiver reads the port number, validates it, and forwards the payload to or from `127.0.0.1:<port>`.
-
-If the port is not in the expose list, the datagram is silently dropped.
-
-QUIC datagrams are unreliable and unordered, which matches UDP semantics. Payloads that exceed the QUIC datagram size limit must be dropped.
+If the port is not in the expose list, the packet is silently dropped.
 
 ## Access Control
 
@@ -110,7 +98,7 @@ The following are explicitly out of scope:
 2. `punch in` with a port mapping opens a local listener and forwards traffic to the remote peer.
 3. `punch in` with `-` as the local address bridges stdio to a single remote TCP connection.
 4. TCP connections are proxied bidirectionally with correct FIN handling.
-5. UDP packets are proxied via QUIC datagrams with the 2-byte port prefix.
+5. UDP packets are proxied with replies routed to the correct originating sender.
 6. Connections to ports not in the expose list are refused (TCP) or silently dropped (UDP).
 7. When `PUNCH_ALLOW` is set, only listed public keys may connect.
 8. A new secret key is generated and persisted if none exists at the configured path.
