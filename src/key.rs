@@ -1,6 +1,9 @@
 use anyhow::{bail, Context, Result};
 use iroh::SecretKey;
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 
 const KEY_PATH: &str = ".local/share/punch/secret.key";
@@ -30,24 +33,14 @@ pub fn load_or_generate() -> Result<SecretKey> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).context("failed to create key directory")?;
         }
-        #[cfg(unix)]
-        {
-            use std::fs::OpenOptions;
-            use std::io::Write;
-            use std::os::unix::fs::OpenOptionsExt;
-            let mut f = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .mode(0o600)
-                .open(&path)
-                .context("failed to create secret key file")?;
-            f.write_all(&key.to_bytes())
-                .context("failed to write secret key")?;
-        }
-        #[cfg(not(unix))]
-        {
-            fs::write(&path, key.to_bytes()).context("failed to write secret key")?;
-        }
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&path)
+            .context("failed to create secret key file")?;
+        f.write_all(&key.to_bytes())
+            .context("failed to write secret key")?;
         eprintln!("secret key created at {}", path.display());
         Ok(key)
     }
