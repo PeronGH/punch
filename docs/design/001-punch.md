@@ -7,8 +7,8 @@ iroh is a product requirement: the project's purpose is to provide port forwardi
 ## Identity and Security
 
 Each peer has a persistent identity derived from a secret key stored on disk.
-The default storage location is `~/.local/share/punch/secret.key`; this path is overridable via the `PUNCH_SECRET_KEY` environment variable.
-If no key file exists at the resolved path, the peer must generate a new key and persist it before proceeding.
+The secret key is stored at `~/.local/share/punch/secret.key`.
+If no key file exists, the peer must generate a new key, persist it, and print `secret key created at <path>` to stderr before proceeding.
 
 The public key derived from the secret key is the peer's sole identifier.
 All connections between peers are end-to-end encrypted by iroh's transport layer; punch adds no additional encryption or authentication beyond what iroh provides.
@@ -28,7 +28,7 @@ Each `<port-spec>` is `<port>` or `<port>/<proto>`, where `<proto>` is `tcp` (de
 Behavior:
 
 - Parse and validate all port specs. Reject duplicates and invalid port numbers.
-- Print the peer's public key to stderr on startup.
+- Print `public key: <key>` to stderr on startup.
 - Accept incoming connections from peers and proxy traffic to `127.0.0.1:<port>` for each exposed port.
 - A connecting peer may only access ports that appear in the expose list; attempts to reach other ports must be refused.
 
@@ -67,22 +67,6 @@ Each proxied UDP packet is delivered independently. UDP semantics (unreliable, u
 
 If the port is not in the expose list, the packet is silently dropped.
 
-## Access Control
-
-By default, any peer that knows the server's public key may connect.
-
-The `PUNCH_ALLOW` environment variable accepts a comma-separated list of public keys. When set, only peers whose public key appears in the list are permitted to connect; all others must be rejected before any port proxying occurs.
-
-## Configuration
-
-All configuration is via environment variables. There are no config files.
-
-| Variable           | Default                           | Description                                                                                            |
-| ------------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `PUNCH_SECRET_KEY` | `~/.local/share/punch/secret.key` | Path to the secret key file.                                                                           |
-| `PUNCH_RELAY_MODE` | `default`                         | Relay behavior: `default` (use iroh's public relays), `disabled` (direct only), or a relay server URL. |
-| `PUNCH_ALLOW`      | _(unset — allow all)_             | Comma-separated list of allowed peer public keys.                                                      |
-
 ## Non-Goals
 
 The following are explicitly out of scope:
@@ -94,13 +78,11 @@ The following are explicitly out of scope:
 
 ## Acceptance Criteria
 
-1. `punch out` exposes specified TCP and UDP ports and prints the public key to stderr.
+1. `punch out` exposes specified TCP and UDP ports and prints `public key: <key>` to stderr.
 2. `punch in` with a port mapping opens a local listener and forwards traffic to the remote peer.
 3. `punch in` with `-` as the local address bridges stdio to a single remote TCP connection.
 4. TCP connections are proxied bidirectionally with correct FIN handling.
 5. UDP packets are proxied with replies routed to the correct originating sender.
 6. Connections to ports not in the expose list are refused (TCP) or silently dropped (UDP).
-7. When `PUNCH_ALLOW` is set, only listed public keys may connect.
-8. A new secret key is generated and persisted if none exists at the configured path.
-9. Relay behavior respects `PUNCH_RELAY_MODE`.
-10. Multiple mappings in a single `punch in` invocation share one connection.
+7. A new secret key is generated, persisted, and reported to stderr if none exists.
+8. Multiple mappings in a single `punch in` invocation share one connection.

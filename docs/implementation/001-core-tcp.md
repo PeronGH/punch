@@ -13,10 +13,10 @@ Depends on: [punch design spec](../design/001-punch.md)
 
 ## Secret Key
 
-On startup, both `out` and `in` load the secret key from the configured path (see design spec).
+On startup, both `out` and `in` load the secret key from `~/.local/share/punch/secret.key`.
 
 - If the file exists, read 32 bytes and construct the key.
-- If the file does not exist, generate a new key, create parent directories, write it with mode `0600`, then proceed.
+- If the file does not exist, generate a new key, create parent directories, write it with mode `0600`, and print `secret key created at <path>` to stderr.
 - If the file exists but is unreadable or malformed, exit with an error.
 
 ## Endpoint
@@ -36,7 +36,7 @@ Single binary with two subcommands.
 
 Each argument is a bare port number (e.g. `8080`). Each port must be 1–65535, no duplicates.
 
-On startup, print the node ID (public key) to stderr in iroh's standard base32 format.
+On startup, print `public key: <node-id>` to stderr, where `<node-id>` is iroh's standard base32 format.
 
 ### `punch in <pubkey> <mapping>...`
 

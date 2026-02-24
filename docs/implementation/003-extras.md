@@ -1,6 +1,6 @@
 # Extras
 
-Adds stdio mode, access control, and environment-variable configuration to the existing core.
+Adds stdio mode to the existing core.
 
 Depends on: [punch design spec](../design/001-punch.md), [core TCP](001-core-tcp.md), [core UDP](002-core-udp.md)
 
@@ -31,52 +31,10 @@ Stdio mapping must coexist with port mappings in the same invocation. The stdio 
 
 Stdin and stdout must be used in raw byte mode. No line buffering, no newline translation. This is required for `ProxyCommand` compatibility with SSH.
 
-## Access Control (`PUNCH_ALLOW`)
-
-### Behavior
-
-On the `out` side, if `PUNCH_ALLOW` is set:
-
-1. Parse it as a comma-separated list of base32 node IDs. Whitespace around each entry is trimmed.
-2. If any entry is malformed, exit with an error at startup (fail-fast, not at connection time).
-3. On each accepted connection, check the remote peer's node ID against the allowlist. If not present, close the connection immediately and log the rejection to stderr.
-
-If `PUNCH_ALLOW` is unset or empty, all peers are allowed (current default behavior).
-
-### Scope
-
-Access control applies per-connection, not per-stream. Once a peer is accepted, it may open streams/send datagrams to any exposed port. The port-level validation defined in the core specs still applies independently.
-
-## Environment Variables
-
-### `PUNCH_SECRET_KEY`
-
-Overrides the default key path (see design spec). When set, the key load/generate logic uses this path instead. The value must be a valid file path; no further validation is performed (I/O errors are reported as usual).
-
-### `PUNCH_RELAY_MODE`
-
-Maps the design spec's relay modes to iroh endpoint configuration:
-
-- `default` or unset: use iroh's built-in default relay mode.
-- `disabled`: set iroh's relay mode to disabled.
-- Any other value: configure a custom iroh relay map with that single URL.
-
-If the URL is malformed, exit with an error at startup.
-
-### Parsing
-
-Environment variables are read once at startup before the endpoint is created. They are not re-read during the lifetime of the process.
-
 ## Error Contracts
 
-- Malformed `PUNCH_ALLOW` entries → exit with error at startup.
-- Malformed `PUNCH_RELAY_MODE` URL → exit with error at startup.
-- Rejected peer (allowlist) → connection closed, event logged to stderr, server continues.
 - Stdio I/O errors → exit with non-zero status.
 
 ## Tests
 
 - **Stdio mapping parsing**: `-:22` accepted, `-:22/udp` rejected, multiple stdio mappings rejected.
-- **`PUNCH_ALLOW` parsing**: valid list, whitespace trimming, malformed entry detection.
-- **`PUNCH_RELAY_MODE` parsing**: `default`, `disabled`, valid URL, malformed URL.
-- **`PUNCH_SECRET_KEY` override**: custom path is used for key load/generate.
