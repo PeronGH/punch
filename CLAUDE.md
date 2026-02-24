@@ -13,6 +13,8 @@ If code/tests reveal missing or incorrect requirements, the agent must report th
 
 ## Specification System
 
+Specs are drafted by the agent and refined through human review and feedback. The human provides direction, constraints, and approval; the agent produces the written artifact.
+
 This repo uses two persistent spec types and one transient execution activity.
 
 ### 1) Design Specs (`/docs/design/`)
@@ -100,4 +102,5 @@ Resolve uncertainty with the user before writing it into a spec.
 - Commit messages follow `type(scope): summary`.
 - Always use package manager commands to add or update dependencies.
 - `README.md` is not a spec, but it must be updated when it is no longer true due to code change.
+- This file (`CLAUDE.md`/`AGENTS.md`) must be updated when the human approves a change to project conventions or processes that makes the current content no longer accurate.
 - If a user request appears to conflict with these guidelines, explicitly double-check intent with the user before proceeding.
