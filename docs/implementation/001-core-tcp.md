@@ -36,11 +36,11 @@ Single binary with two subcommands.
 
 Each argument is a bare port number (e.g. `8080`). Each port must be 1–65535, no duplicates.
 
-On startup, print `public key: <node-id>` to stderr, where `<node-id>` is iroh's standard base32 format.
+On startup, print `public key: <endpoint-id>` to stderr, where `<endpoint-id>` is iroh's standard base32 format.
 
 ### `punch in <pubkey> <mapping>...`
 
-`<pubkey>` is the remote peer's node ID in base32.
+`<pubkey>` is the remote peer's endpoint ID in base32.
 
 Each `<mapping>` is `<local-port>:<remote-port>`. Both ports must be 1–65535.
 
@@ -57,7 +57,7 @@ Each `<mapping>` is `<local-port>:<remote-port>`. Both ports must be 1–65535.
 
 ## Client (`in`) Loop
 
-1. Connect to the remote peer: `endpoint.connect(NodeAddr::new(pubkey), b"punch/0")`.
+1. Connect to the remote peer: `endpoint.connect(endpoint_id, b"punch/0")`.
 2. For each TCP mapping, bind a `TcpListener` on `127.0.0.1:<local-port>`.
 3. For each accepted TCP connection:
    a. Open a bidi stream on the QUIC connection.
