@@ -5,8 +5,8 @@
 **Order of operations**
 
 1. **Spec first**: the spec is the durable source of truth. Code can be deleted and rewritten; the spec survives.
-2. **Tests next**: test coverage is from day one, not added later. Only test code that has meaningful logic (branching, transformations, error handling). Don't test code that can only break if the language, runtime, or a dependency breaks.
-3. **Code last**: write code along with tests, implementing spec in full.
+2. **Tests are not optional**: tests and code are written together, but specs define what to test before implementation begins. Only test code that has meaningful logic (branching, transformations, error handling). Don't test code that can only break if the language, runtime, or a dependency breaks.
+3. **Code implements the spec**: write code along with tests, implementing the spec in full.
 
 **Drift rule**: resolve drift by propagating changes upward in this order: `code -> execution plan -> implementation spec -> design spec`.
 If code/tests reveal missing or incorrect requirements, the agent must report the drift to the user and wait for approval before updating affected layers in that sequence.
@@ -85,9 +85,8 @@ Spec files are numbered with a zero-padded three-digit prefix starting from `001
 
 ## Language
 
-Specs must be definitive and concise: no TBDs, no unresolved decisions, no optional ambiguity.
+Specs must be definitive and concise: no TBDs, no unresolved decisions, no optional ambiguity. When uncertain, the agent makes a decision on the human's behalf and presents it with enough context for the human to review and override if needed.
 Specs must also be internally consistent and coherent: avoid patchy wording, contradictions, and overlapping rules that change meaning, and ensure revisions read as if written that way from the beginning.
-Resolve uncertainty with the user before writing it into a spec.
 
 ## Coding Quality
 
