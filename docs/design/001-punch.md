@@ -2,7 +2,7 @@
 
 Peer-to-peer TCP and UDP port forwarding over [iroh](https://github.com/n0-computer/iroh). Peers identify each other by public key; connections are direct and end-to-end encrypted.
 
-iroh is a product requirement: the project's purpose is to provide port forwarding on top of iroh's peer-to-peer QUIC transport.
+iroh is a product requirement: the project's purpose is to provide port forwarding on top of iroh's peer-to-peer transport.
 
 ## Identity and Security
 
@@ -103,4 +103,4 @@ The following are explicitly out of scope:
 7. When `PUNCH_ALLOW` is set, only listed public keys may connect.
 8. A new secret key is generated and persisted if none exists at the configured path.
 9. Relay behavior respects `PUNCH_RELAY_MODE`.
-10. Multiple mappings in a single `punch in` invocation share one QUIC connection.
+10. Multiple mappings in a single `punch in` invocation share one connection.

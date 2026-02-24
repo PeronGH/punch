@@ -13,7 +13,7 @@ Depends on: [punch design spec](../design/001-punch.md)
 
 ## Secret Key
 
-On startup, both `out` and `in` load the secret key from `~/.local/share/punch/secret.key`.
+On startup, both `out` and `in` load the secret key from the configured path (see design spec).
 
 - If the file exists, read 32 bytes and construct the key.
 - If the file does not exist, generate a new key, create parent directories, write it with mode `0600`, then proceed.

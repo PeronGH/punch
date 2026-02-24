@@ -51,15 +51,15 @@ Access control applies per-connection, not per-stream. Once a peer is accepted, 
 
 ### `PUNCH_SECRET_KEY`
 
-Overrides the default key path `~/.local/share/punch/secret.key`. When set, the key load/generate logic uses this path instead. The value must be a valid file path; no further validation is performed (I/O errors are reported as usual).
+Overrides the default key path (see design spec). When set, the key load/generate logic uses this path instead. The value must be a valid file path; no further validation is performed (I/O errors are reported as usual).
 
 ### `PUNCH_RELAY_MODE`
 
-Controls the iroh endpoint's relay configuration:
+Maps the design spec's relay modes to iroh endpoint configuration:
 
-- `default` or unset: use iroh's default relay servers.
-- `disabled`: set relay mode to disabled (direct connections only).
-- Any other value: treat as a relay server URL and configure a custom relay map with that single URL.
+- `default` or unset: use iroh's built-in default relay mode.
+- `disabled`: set iroh's relay mode to disabled.
+- Any other value: configure a custom iroh relay map with that single URL.
 
 If the URL is malformed, exit with an error at startup.
 
