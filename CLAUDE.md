@@ -52,16 +52,16 @@ Implementation specs do not contain:
 
 Unless explicitly declared as an architectural constraint, code organization is refactorable.
 
-### 3) Execution Plan (Transient, Not a Document Type)
+### 3) Execution Plan (Transient)
 
-A phased plan is required before implementation work begins, but it is a conversation artifact, not a committed spec artifact.
+A phased plan is required before implementation work begins. It is transient and not committed to the repository.
 When implementing a doc from `/docs/implementation/`, the agent must follow this flow:
 
 1. Propose a phased breakdown to the user.
 2. Wait for user review and an explicit start instruction before making implementation edits or commits.
 3. Keep each phase atomic — producing a coherent, compilable, runnable product — and small enough for human review (ideally under 200 lines changed, excluding lockfiles and generated files).
-4. After start, execute phases autonomously: commit after each phase, report status, and continue to the next phase without waiting for additional user confirmation unless blocked by missing input, failures, or detected drift.
-5. Reports must focus on decision-relevant content: requirement or behavior now satisfied, scope boundaries that remain unchanged, validation evidence, what is guaranteed correct based on passing tests, assumptions made, risks introduced, any detected drift and proposed updates across execution plan/implementation spec/design spec, and why continuing is safe.
+4. After start, execute phases autonomously: commit after each phase and continue to the next without waiting for additional user confirmation unless blocked by missing input, failures, or detected drift.
+5. Report when all phases are complete or when blocked. Reports must focus on decision-relevant content: requirements now satisfied, scope boundaries unchanged, validation evidence, assumptions made, risks introduced, any detected drift and proposed updates across execution plan/implementation spec/design spec, and why continuing is safe.
 
 ## Boundary Rule
 
