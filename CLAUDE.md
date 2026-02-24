@@ -19,31 +19,34 @@ This repo uses two persistent spec types and one transient execution activity.
 
 ### 1) Design Specs (`/docs/design/`)
 
-Purpose: define what the system must do.
+Purpose: define what the system must do — from the perspective of someone who uses it, not someone who builds it.
 
 Design specs contain:
 
 - User-visible behavior and contracts.
+- CLI/API surface, default configuration values, and any paths or identifiers users interact with.
 - Scope, non-goals, and acceptance criteria.
 - Architecture constraints that should remain true across rewrites.
+- Mermaid diagrams where they clarify flows, state machines, or relationships.
 
 Design specs do not contain:
 
-- Library/framework/package choices.
-- File paths, type/function signatures, or symbol names.
+- Library/framework/package choices (see Boundary Rule for exceptions).
+- Internal type/function signatures, symbol names, or file layout.
 - Internal algorithms or step-by-step execution mechanics unless externally observable.
 
 ### 2) Implementation Specs (`/docs/implementation/`)
 
-Purpose: define how a feature is implemented in durable engineering terms.
+Purpose: define how a feature is built in durable engineering terms — decisions that an implementer needs but a user never sees.
 
 Implementation specs contain:
 
 - Concrete dependency choices and rationale.
-- Interfaces, invariants, constraints, and error contracts.
-- Internal behavior that is not user-facing.
+- Invariants, constraints, and error contracts.
+- Wire formats, protocols, and internal data representations.
 - Required tests for meaningful logic.
 - Structural boundaries only when they are durable architectural constraints; include rationale when enforced.
+- Mermaid diagrams where they clarify architecture, data flow, or component interaction.
 
 Implementation specs do not contain:
 
