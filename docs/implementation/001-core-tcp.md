@@ -2,7 +2,7 @@
 
 Implements the minimum viable punch: secret key management, iroh endpoint, CLI, and TCP-only proxying.
 
-Depends on: [punch design spec](../design/punch.md)
+Depends on: [punch design spec](../design/001-punch.md)
 
 ## Dependencies
 

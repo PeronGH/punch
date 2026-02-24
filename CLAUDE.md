@@ -68,6 +68,10 @@ If a statement would become false after swapping implementation dependencies whi
 Exception:
 A design spec may name a concrete dependency only when that dependency is itself a product requirement (for example compliance, mandated platform/runtime, or explicit interoperability commitment). The reason must be stated explicitly.
 
+## Naming
+
+Spec files are numbered with a zero-padded three-digit prefix starting from `001`, followed by a hyphen and a descriptive slug: `001-slug.md`. New specs take the next available number within their directory.
+
 ## Granularity and References
 
 - Design specs may cover multiple features.

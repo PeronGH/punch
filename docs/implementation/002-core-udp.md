@@ -2,7 +2,7 @@
 
 Adds UDP port forwarding to the existing TCP core.
 
-Depends on: [punch design spec](../design/punch.md), [core TCP](core-tcp.md)
+Depends on: [punch design spec](../design/001-punch.md), [core TCP](001-core-tcp.md)
 
 ## Dependencies
 

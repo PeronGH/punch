@@ -2,7 +2,7 @@
 
 Adds stdio mode, access control, and environment-variable configuration to the existing core.
 
-Depends on: [punch design spec](../design/punch.md), [core TCP](core-tcp.md), [core UDP](core-udp.md)
+Depends on: [punch design spec](../design/001-punch.md), [core TCP](001-core-tcp.md), [core UDP](002-core-udp.md)
 
 ## Stdio Mode
 
