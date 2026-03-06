@@ -1,4 +1,4 @@
-use crate::parse::Mapping;
+use crate::parse::{Mapping, Protocol};
 use crate::proxy;
 use anyhow::{bail, Result};
 use iroh::endpoint::Connection;
@@ -23,6 +23,10 @@ pub async fn run(
 
     let mut tasks = JoinSet::new();
     for mapping in mappings {
+        if mapping.protocol == Protocol::Udp {
+            bail!("UDP mappings are not supported yet");
+        }
+
         let conn = conn.clone();
         tasks.spawn(async move { run_listener(conn, mapping).await });
     }

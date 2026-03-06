@@ -13,7 +13,7 @@ use iroh::EndpointId;
 enum Cli {
     /// Expose local ports to remote peers
     Out {
-        /// Ports to expose (e.g. 8080 22)
+        /// Ports to expose (e.g. 8080 53/udp)
         #[arg(required = true)]
         ports: Vec<String>,
     },
@@ -21,7 +21,7 @@ enum Cli {
     In {
         /// Remote peer's endpoint ID (base32)
         pubkey: String,
-        /// Mappings (e.g. 4000:8080)
+        /// Mappings (e.g. 4000:8080 5300:53/udp)
         #[arg(required = true)]
         mappings: Vec<String>,
     },

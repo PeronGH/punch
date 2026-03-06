@@ -1,4 +1,4 @@
-use crate::parse::Port;
+use crate::parse::{PortSpec, Protocol};
 use crate::proxy;
 use anyhow::{bail, Result};
 use iroh::endpoint::{Incoming, RecvStream, SendStream};
@@ -8,7 +8,7 @@ use tokio::net::TcpStream;
 
 const ALPN: &[u8] = b"punch/0";
 
-pub async fn run(ports: Vec<Port>, secret_key: SecretKey) -> Result<()> {
+pub async fn run(ports: Vec<PortSpec>, secret_key: SecretKey) -> Result<()> {
     let endpoint = Endpoint::builder()
         .secret_key(secret_key)
         .alpns(vec![ALPN.to_vec()])
@@ -17,7 +17,15 @@ pub async fn run(ports: Vec<Port>, secret_key: SecretKey) -> Result<()> {
 
     eprintln!("public key: {}", endpoint.id());
 
-    let allowed: HashSet<u16> = ports.iter().map(|p| p.get()).collect();
+    let allowed: HashSet<u16> = ports
+        .iter()
+        .filter(|port| port.protocol == Protocol::Tcp)
+        .map(|port| port.port())
+        .collect();
+
+    if ports.iter().any(|port| port.protocol == Protocol::Udp) {
+        bail!("UDP expose ports are not supported yet");
+    }
 
     while let Some(incoming) = endpoint.accept().await {
         let allowed = allowed.clone();

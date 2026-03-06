@@ -66,6 +66,7 @@ If the port is not in the expose list or the local TCP connection fails, the str
 Each proxied UDP packet is delivered independently. UDP semantics (unreliable, unordered) are preserved. Replies from the local service are routed back to the correct originating sender on the client side.
 
 If the port is not in the expose list, the packet is silently dropped.
+If a UDP payload is too large for the current QUIC datagram limit, it is dropped and logged to stderr.
 
 ## Non-Goals
 

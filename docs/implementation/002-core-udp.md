@@ -91,6 +91,7 @@ On the client side, incoming datagrams are dispatched by flow ID to the correct 
 
 - Local UDP send/receive errors are logged to stderr and do not terminate the process.
 - A missing or unreachable local UDP target is logged on first occurrence per flow and the datagram is dropped.
+- A UDP payload larger than the current QUIC datagram limit is logged and dropped without closing the connection.
 
 ## Tests
 
@@ -99,3 +100,4 @@ On the client side, incoming datagrams are dispatched by flow ID to the correct 
 - **Datagram framing**: client→server 4-byte header and server→client 2-byte header are correctly constructed and parsed.
 - **Flow routing**: two distinct local senders to the same mapping receive their own replies correctly.
 - **Flow timeout**: inactive flows are evicted after 5 minutes.
+- **Oversize UDP payload**: payloads that exceed the current QUIC datagram size limit are logged and dropped while the connection remains usable.
