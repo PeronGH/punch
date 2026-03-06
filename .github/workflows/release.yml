@@ -1,4 +1,4 @@
-name: Release
+name: Prerelease
 
 on:
   workflow_run:
@@ -120,7 +120,7 @@ jobs:
           merge-multiple: true
           path: release-artifacts
 
-      - name: Create GitHub release
+      - name: Create GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -129,4 +129,5 @@ jobs:
           gh release create "${{ needs.prepare.outputs.tag }}" release-artifacts/punch-* \
             --target "${{ needs.prepare.outputs.sha }}" \
             --title "${{ needs.prepare.outputs.tag }}" \
+            --prerelease \
             --generate-notes

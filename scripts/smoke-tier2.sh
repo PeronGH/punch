@@ -3,9 +3,9 @@ set -euo pipefail
 
 if [[ "${1:-}" == "--help" ]]; then
   cat <<'EOF'
-Usage: scripts/smoke-e2e.sh
+Usage: scripts/smoke-tier2.sh
 
-Runs same-machine end-to-end smoke checks for:
+Runs the full same-machine end-to-end smoke checks:
   - TCP listener mapping
   - UDP listener mapping
   - TCP stdio mapping
@@ -42,6 +42,10 @@ SERVER_PID=""
 OUT_PID=""
 TCP_IN_PID=""
 UDP_IN_PID=""
+
+announce() {
+  echo "tier2: $*" >&2
+}
 
 dump_logs() {
   local label="$1"
@@ -84,6 +88,7 @@ wait_for_public_key() {
   local pubkey=""
 
   for _ in $(seq 1 100); do
+    announce "wait for punch out pubkey"
     pubkey="$(sed -n 's/^public key: //p' "$log_path" | tail -n 1)"
     if [[ -n "$pubkey" ]]; then
       printf '%s\n' "$pubkey"
@@ -105,6 +110,7 @@ wait_for_tcp_listener() {
   local port="$3"
 
   for _ in $(seq 1 100); do
+    announce "wait for tcp listener"
     if ! process_is_alive "$pid"; then
       return 1
     fi
@@ -136,6 +142,7 @@ start_tcp_mapping() {
   local pubkey="$1"
   local log_path="$2"
 
+  announce "start tcp listener mapping"
   HOME="$TMP_HOME_IN" "$PUNCH_BIN" in "$pubkey" "$TCP_LOCAL_PORT:$TCP_ECHO_PORT" \
     >/dev/null 2>"$log_path" &
   TCP_IN_PID=$!
@@ -168,6 +175,7 @@ wait_for_udp_mapping() {
   local log_path="$2"
 
   for _ in $(seq 1 5); do
+    announce "wait for udp mapping"
     if ! process_is_alive "$pid"; then
       return 1
     fi
@@ -188,6 +196,7 @@ start_udp_mapping() {
   local pubkey="$1"
   local log_path="$2"
 
+  announce "start udp listener mapping"
   HOME="$TMP_HOME_IN" "$PUNCH_BIN" in "$pubkey" "$UDP_LOCAL_PORT:$UDP_ECHO_PORT/udp" \
     >/dev/null 2>"$log_path" &
   UDP_IN_PID=$!
@@ -197,7 +206,8 @@ launch_tcp_until_ready() {
   local pubkey="$1"
   local log_path="$2"
 
-  for _ in $(seq 1 10); do
+  for attempt in $(seq 1 10); do
+    announce "tcp launch attempt ${attempt}"
     : >"$log_path"
     start_tcp_mapping "$pubkey" "$log_path"
     if wait_for_tcp_listener "$TCP_IN_PID" "$log_path" "$TCP_LOCAL_PORT"; then
@@ -214,7 +224,8 @@ launch_udp_until_ready() {
   local pubkey="$1"
   local log_path="$2"
 
-  for _ in $(seq 1 10); do
+  for attempt in $(seq 1 10); do
+    announce "udp launch attempt ${attempt}"
     : >"$log_path"
     start_udp_mapping "$pubkey" "$log_path"
     if UDP_RESULT="$(wait_for_udp_mapping "$UDP_IN_PID" "$log_path")"; then
@@ -234,7 +245,8 @@ run_stdio_probe() {
   local output=""
   local status=0
 
-  for _ in $(seq 1 10); do
+  for attempt in $(seq 1 10); do
+    announce "stdio attempt ${attempt}"
     : >"$log_path"
     set +e
     output="$(printf 'stdio-e2e' | HOME="$TMP_HOME_IN" "$PUNCH_BIN" in "$pubkey" -:43112 2>"$log_path")"
@@ -273,6 +285,7 @@ TCP_IN_LOG="$(mktemp)"
 UDP_IN_LOG="$(mktemp)"
 STDIO_LOG="$(mktemp)"
 
+announce "start local tcp and udp echo servers"
 python3 -u - <<'PY' >/dev/null 2>&1 &
 import socket
 import threading
@@ -311,12 +324,14 @@ threading.Event().wait()
 PY
 SERVER_PID=$!
 
+announce "start punch out"
 HOME="$TMP_HOME_OUT" "$PUNCH_BIN" out "$TCP_ECHO_PORT" "$TCP_STDIO_PORT" "$UDP_ECHO_PORT/udp" \
   >/dev/null 2>"$OUT_LOG" &
 OUT_PID=$!
 
 PUBKEY="$(wait_for_public_key "$OUT_PID" "$OUT_LOG")"
 
+announce "run tcp phase"
 launch_tcp_until_ready "$PUBKEY" "$TCP_IN_LOG"
 
 TCP_RESULT="$(python3 - <<'PY'
@@ -339,20 +354,25 @@ if [[ "$TCP_RESULT" != "tcp-e2e" ]]; then
   dump_logs_and_fail "tcp smoke test failed: $TCP_RESULT" "punch in (tcp)" "$TCP_IN_LOG"
 fi
 
+announce "tcp phase passed"
 stop_process TCP_IN_PID
 
+announce "run udp phase"
 UDP_RESULT="$(launch_udp_until_ready "$PUBKEY" "$UDP_IN_LOG")"
 
 if [[ "$UDP_RESULT" != udp-e2e-* ]]; then
   dump_logs_and_fail "udp smoke test failed: $UDP_RESULT" "punch in (udp)" "$UDP_IN_LOG"
 fi
 
+announce "udp phase passed"
 stop_process UDP_IN_PID
 
+announce "run stdio phase"
 STDIO_RESULT="$(run_stdio_probe "$PUBKEY" "$STDIO_LOG")"
 
 if [[ "$STDIO_RESULT" != "stdio-e2e" ]]; then
   dump_logs_and_fail "stdio smoke test failed: $STDIO_RESULT" "stdio" "$STDIO_LOG"
 fi
 
-echo "smoke e2e passed"
+announce "stdio phase passed"
+echo "tier2: success"

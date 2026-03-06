@@ -1,0 +1,35 @@
+name: Tier 2 Smoke
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event.release.prerelease == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Download prerelease Linux binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download "${{ github.event.release.tag_name }}" \
+            --pattern 'punch-linux-amd64' \
+            --dir dist
+          chmod +x dist/punch-linux-amd64
+
+      - name: Run tier 2 smoke test
+        env:
+          PUNCH_BIN: dist/punch-linux-amd64
+        run: ./scripts/smoke-tier2.sh
