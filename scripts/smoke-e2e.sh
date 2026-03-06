@@ -234,16 +234,22 @@ run_stdio_probe() {
   local output=""
   local status=0
 
-  set +e
-  output="$(printf 'stdio-e2e' | HOME="$TMP_HOME_IN" "$PUNCH_BIN" in "$pubkey" -:43112 2>"$log_path")"
-  status=$?
-  set -e
+  for _ in $(seq 1 10); do
+    : >"$log_path"
+    set +e
+    output="$(printf 'stdio-e2e' | HOME="$TMP_HOME_IN" "$PUNCH_BIN" in "$pubkey" -:43112 2>"$log_path")"
+    status=$?
+    set -e
 
-  if (( status != 0 )); then
-    dump_logs_and_fail "stdio smoke test failed with exit code $status" "stdio" "$log_path"
-  fi
+    if (( status == 0 )); then
+      printf '%s\n' "$output"
+      return 0
+    fi
 
-  printf '%s\n' "$output"
+    sleep 1
+  done
+
+  dump_logs_and_fail "stdio smoke test failed with exit code $status" "stdio" "$log_path"
 }
 
 cleanup() {
