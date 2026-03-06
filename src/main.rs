@@ -23,8 +23,8 @@ enum Cli {
     In {
         /// Remote peer's endpoint ID (base32)
         pubkey: String,
-        /// Mappings (e.g. 4000:8080 5300:53/udp)
-        #[arg(required = true)]
+        /// Mappings (e.g. 4000:8080 5300:53/udp -:22)
+        #[arg(required = true, allow_hyphen_values = true)]
         mappings: Vec<String>,
     },
 }
@@ -42,6 +42,42 @@ async fn main() -> Result<()> {
             let mappings = parse::parse_mappings(&mappings)?;
             let secret_key = key::load_or_generate()?;
             client::run(endpoint_id, mappings, secret_key).await
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Cli;
+    use clap::Parser;
+
+    #[test]
+    fn cli_accepts_stdio_mapping_without_double_dash() {
+        let cli = Cli::try_parse_from(["punch", "in", "peer", "-:22"]).unwrap();
+        match cli {
+            Cli::In { mappings, .. } => assert_eq!(mappings, vec!["-:22"]),
+            _ => panic!("expected in subcommand"),
+        }
+    }
+
+    #[test]
+    fn cli_accepts_mixed_mappings_with_stdio() {
+        let cli = Cli::try_parse_from(["punch", "in", "peer", "-:22", "3000:8080", "5300:53/udp"])
+            .unwrap();
+        match cli {
+            Cli::In { mappings, .. } => {
+                assert_eq!(mappings, vec!["-:22", "3000:8080", "5300:53/udp"])
+            }
+            _ => panic!("expected in subcommand"),
+        }
+    }
+
+    #[test]
+    fn cli_still_accepts_stdio_mapping_after_double_dash() {
+        let cli = Cli::try_parse_from(["punch", "in", "peer", "--", "-:22"]).unwrap();
+        match cli {
+            Cli::In { mappings, .. } => assert_eq!(mappings, vec!["-:22"]),
+            _ => panic!("expected in subcommand"),
         }
     }
 }
