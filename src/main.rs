@@ -3,6 +3,7 @@ mod key;
 mod parse;
 mod proxy;
 mod server;
+mod stdio;
 mod udp;
 
 use anyhow::{Context, Result};

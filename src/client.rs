@@ -1,7 +1,8 @@
 use crate::parse::{LocalTarget, Mapping, Protocol};
 use crate::proxy;
+use crate::stdio::StdioHandles;
 use crate::udp;
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use iroh::endpoint::Connection;
 use iroh::{Endpoint, EndpointId, SecretKey};
 use std::collections::HashMap;
@@ -27,6 +28,20 @@ pub async fn run(
 }
 
 pub(crate) async fn run_connection(conn: Connection, mappings: Vec<Mapping>) -> Result<()> {
+    let stdio = mappings
+        .iter()
+        .any(|mapping| mapping.local == LocalTarget::Stdio)
+        .then(StdioHandles::from_process_stdio)
+        .transpose()?;
+
+    run_connection_with_stdio(conn, mappings, stdio).await
+}
+
+async fn run_connection_with_stdio(
+    conn: Connection,
+    mappings: Vec<Mapping>,
+    mut stdio: Option<StdioHandles>,
+) -> Result<()> {
     let mut tasks = JoinSet::new();
     let mut udp_mappings = Vec::new();
 
@@ -44,8 +59,14 @@ pub(crate) async fn run_connection(conn: Connection, mappings: Vec<Mapping>) -> 
                     socket,
                 });
             }
-            (LocalTarget::Stdio, Protocol::Tcp) => bail!("stdio mappings are not supported yet"),
-            (LocalTarget::Stdio, Protocol::Udp) => unreachable!("udp stdio mappings are rejected during parsing"),
+            (LocalTarget::Stdio, Protocol::Tcp) => {
+                let conn = conn.clone();
+                let stdio = stdio.take().context("missing stdio handles")?;
+                tasks.spawn(async move { run_stdio_mapping(conn, mapping.remote, stdio).await });
+            }
+            (LocalTarget::Stdio, Protocol::Udp) => {
+                unreachable!("udp stdio mappings are rejected during parsing")
+            }
         }
     }
 
@@ -92,6 +113,20 @@ async fn handle_stream(conn: Connection, remote_port: u16, tcp: TcpStream) -> Re
     let (mut send, recv) = conn.open_bi().await?;
     send.write_all(&remote_port.to_be_bytes()).await?;
     proxy::bidirectional(send, recv, tcp).await
+}
+
+async fn run_stdio_mapping(conn: Connection, remote_port: u16, stdio: StdioHandles) -> Result<()> {
+    let (mut send, mut recv) = conn.open_bi().await?;
+    send.write_all(&remote_port.to_be_bytes()).await?;
+
+    let StdioHandles {
+        mut input,
+        mut output,
+        raw_mode_guard,
+    } = stdio;
+    let _raw_mode_guard = raw_mode_guard;
+
+    proxy::bridge(&mut send, &mut recv, &mut input, &mut output).await
 }
 
 #[derive(Clone)]
@@ -269,18 +304,57 @@ async fn supervise_tasks(conn_closed: impl Future, mut tasks: JoinSet<Result<()>
 
 #[cfg(test)]
 mod tests {
-    use super::{ClientUdpState, run_connection, supervise_tasks};
+    use super::{ClientUdpState, run_connection, run_connection_with_stdio, supervise_tasks};
     use crate::parse::{Mapping, PortSpec};
     use crate::server::{self, AllowedPorts};
+    use crate::stdio::StdioHandles;
     use crate::udp;
     use anyhow::Result;
     use iroh::{Endpoint, SecretKey};
     use std::net::{Ipv4Addr, SocketAddr};
     use std::time::{Duration, Instant};
-    use tokio::net::{TcpListener, UdpSocket};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt, duplex};
+    use tokio::net::{TcpListener, TcpStream, UdpSocket};
     use tokio::sync::oneshot;
     use tokio::task::JoinSet;
     use tokio::time::{sleep, timeout};
+
+    async fn spawn_tcp_echo_server() -> Result<(u16, tokio::task::JoinHandle<()>)> {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let port = listener.local_addr()?.port();
+        let task = tokio::spawn(async move {
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let (mut read, mut write) = socket.split();
+                    tokio::io::copy(&mut read, &mut write).await.unwrap();
+                });
+            }
+        });
+        Ok((port, task))
+    }
+
+    async fn spawn_remote_server(
+        allowed: AllowedPorts,
+    ) -> Result<(Endpoint, tokio::task::JoinHandle<()>)> {
+        let server_key = SecretKey::generate(&mut rand::rng());
+        let server_endpoint = Endpoint::builder()
+            .secret_key(server_key)
+            .alpns(vec![super::ALPN.to_vec()])
+            .bind()
+            .await?;
+
+        let task = {
+            let server_endpoint = server_endpoint.clone();
+            tokio::spawn(async move {
+                let incoming = server_endpoint.accept().await.unwrap();
+                let conn = incoming.await.unwrap();
+                let _ = server::serve_connection(conn, allowed).await;
+            })
+        };
+
+        Ok((server_endpoint, task))
+    }
 
     #[tokio::test]
     async fn bind_failure_is_not_hidden_by_first_listener() -> Result<()> {
@@ -401,6 +475,132 @@ mod tests {
         echo_task.abort();
         let _ = echo_task.await;
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn stdio_mapping_roundtrips_bytes() -> Result<()> {
+        let (remote_port, echo_task) = spawn_tcp_echo_server().await?;
+        let allowed =
+            AllowedPorts::from_ports(&[format!("{remote_port}/tcp").parse::<PortSpec>()?]);
+        let (server_endpoint, server_task) = spawn_remote_server(allowed).await?;
+
+        let client_key = SecretKey::generate(&mut rand::rng());
+        let client_endpoint = Endpoint::builder().secret_key(client_key).bind().await?;
+        let conn = client_endpoint
+            .connect(server_endpoint.addr(), super::ALPN)
+            .await?;
+
+        let mapping: Mapping = "-:22".replace("22", &remote_port.to_string()).parse()?;
+        let (mut input_writer, input_reader) = duplex(64);
+        let (output_writer, mut output_reader) = duplex(64);
+        let stdio = StdioHandles::from_parts(input_reader, output_writer);
+
+        let client_task = tokio::spawn(async move {
+            run_connection_with_stdio(conn, vec![mapping], Some(stdio)).await
+        });
+
+        input_writer.write_all(b"stdio-test").await?;
+        drop(input_writer);
+
+        let mut output = Vec::new();
+        output_reader.read_to_end(&mut output).await?;
+        assert_eq!(output, b"stdio-test");
+        client_task.await??;
+
+        client_endpoint.close().await;
+        server_endpoint.close().await;
+        server_task.abort();
+        let _ = server_task.await;
+        echo_task.abort();
+        let _ = echo_task.await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn stdio_mapping_errors_when_remote_port_is_refused() -> Result<()> {
+        let allowed = AllowedPorts::from_ports(&[]);
+        let (server_endpoint, server_task) = spawn_remote_server(allowed).await?;
+
+        let client_key = SecretKey::generate(&mut rand::rng());
+        let client_endpoint = Endpoint::builder().secret_key(client_key).bind().await?;
+        let conn = client_endpoint
+            .connect(server_endpoint.addr(), super::ALPN)
+            .await?;
+
+        let mapping: Mapping = "-:9999".parse()?;
+        let (input_writer, input_reader) = duplex(64);
+        drop(input_writer);
+        let (output_writer, _output_reader) = duplex(64);
+        let stdio = StdioHandles::from_parts(input_reader, output_writer);
+
+        let result = run_connection_with_stdio(conn, vec![mapping], Some(stdio)).await;
+        assert!(result.is_err());
+
+        client_endpoint.close().await;
+        server_endpoint.close().await;
+        server_task.abort();
+        let _ = server_task.await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn stdio_mapping_can_run_alongside_listener_mappings() -> Result<()> {
+        let (stdio_remote_port, stdio_echo_task) = spawn_tcp_echo_server().await?;
+        let (listener_remote_port, listener_echo_task) = spawn_tcp_echo_server().await?;
+        let local_listener_probe = TcpListener::bind("127.0.0.1:0").await?;
+        let local_listener_port = local_listener_probe.local_addr()?.port();
+        drop(local_listener_probe);
+
+        let allowed = AllowedPorts::from_ports(&[
+            format!("{stdio_remote_port}/tcp").parse::<PortSpec>()?,
+            format!("{listener_remote_port}/tcp").parse::<PortSpec>()?,
+        ]);
+        let (server_endpoint, server_task) = spawn_remote_server(allowed).await?;
+
+        let client_key = SecretKey::generate(&mut rand::rng());
+        let client_endpoint = Endpoint::builder().secret_key(client_key).bind().await?;
+        let conn = client_endpoint
+            .connect(server_endpoint.addr(), super::ALPN)
+            .await?;
+
+        let stdio_mapping: Mapping = format!("-:{stdio_remote_port}").parse()?;
+        let listener_mapping: Mapping =
+            format!("{local_listener_port}:{listener_remote_port}").parse()?;
+        let (mut input_writer, input_reader) = duplex(64);
+        let (output_writer, mut output_reader) = duplex(64);
+        let stdio = StdioHandles::from_parts(input_reader, output_writer);
+
+        let client_task = tokio::spawn(async move {
+            run_connection_with_stdio(conn, vec![stdio_mapping, listener_mapping], Some(stdio))
+                .await
+        });
+
+        input_writer.write_all(b"stdio-live").await?;
+        sleep(Duration::from_millis(100)).await;
+
+        let mut listener_client = TcpStream::connect(("127.0.0.1", local_listener_port)).await?;
+        listener_client.write_all(b"listener-live").await?;
+        let mut listener_reply = [0u8; 32];
+        let len = listener_client.read(&mut listener_reply).await?;
+        assert_eq!(&listener_reply[..len], b"listener-live");
+
+        drop(listener_client);
+        drop(input_writer);
+
+        let mut output = Vec::new();
+        output_reader.read_to_end(&mut output).await?;
+        assert_eq!(output, b"stdio-live");
+        client_task.await??;
+
+        client_endpoint.close().await;
+        server_endpoint.close().await;
+        server_task.abort();
+        let _ = server_task.await;
+        stdio_echo_task.abort();
+        let _ = stdio_echo_task.await;
+        listener_echo_task.abort();
+        let _ = listener_echo_task.await;
         Ok(())
     }
 }

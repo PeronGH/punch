@@ -103,7 +103,7 @@ async fn run_tcp_accept_loop(conn: Connection, allowed: Arc<HashSet<u16>>) -> Re
 }
 
 async fn handle_stream(
-    send: SendStream,
+    mut send: SendStream,
     mut recv: RecvStream,
     allowed: Arc<HashSet<u16>>,
 ) -> Result<()> {
@@ -112,11 +112,24 @@ async fn handle_stream(
     let port = u16::from_be_bytes(port_buf);
 
     if !allowed.contains(&port) {
+        reset_stream(&mut send, &mut recv);
         bail!("port {port} not in expose list");
     }
 
-    let tcp = TcpStream::connect(("127.0.0.1", port)).await?;
+    let tcp = match TcpStream::connect(("127.0.0.1", port)).await {
+        Ok(tcp) => tcp,
+        Err(e) => {
+            reset_stream(&mut send, &mut recv);
+            return Err(e.into());
+        }
+    };
     proxy::bidirectional(send, recv, tcp).await
+}
+
+fn reset_stream(send: &mut SendStream, recv: &mut RecvStream) {
+    let error_code = 1u32.into();
+    let _ = send.reset(error_code);
+    let _ = recv.stop(error_code);
 }
 
 #[derive(Default)]
