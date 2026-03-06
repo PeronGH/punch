@@ -106,6 +106,8 @@ Specs must also be internally consistent and coherent: avoid patchy wording, con
 - `README.md` is not a spec, but it must be updated when it is no longer true due to code change.
 - This file (`CLAUDE.md`/`AGENTS.md`) must be updated when the human approves a change to project conventions or processes that makes the current content no longer accurate.
 - If a user request appears to conflict with these guidelines, explicitly double-check intent with the user before proceeding.
+- CI/CD workflows, release automation, and distribution artifacts are workflow concerns, not design or implementation specs, unless they change user-visible product behavior.
+- Dependency update automation is manual by project choice. Do not add Dependabot or scheduled dependency bots unless the human asks.
 
 ---
 
