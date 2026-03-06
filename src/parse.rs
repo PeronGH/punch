@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::str::FromStr;
 
 /// A validated port number (1–65535).
@@ -85,7 +85,9 @@ impl FromStr for Mapping {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        let (l, r) = s.split_once(':').context("mapping must be <local>:<remote>")?;
+        let (l, r) = s
+            .split_once(':')
+            .context("mapping must be <local>:<remote>")?;
         if l == "-" {
             bail!("stdio mappings are not supported yet");
         }

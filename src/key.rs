@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use iroh::SecretKey;
 use std::fs;
 use std::fs::OpenOptions;

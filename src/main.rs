@@ -3,6 +3,7 @@ mod key;
 mod parse;
 mod proxy;
 mod server;
+mod udp;
 
 use anyhow::{Context, Result};
 use clap::Parser;

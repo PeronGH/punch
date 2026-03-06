@@ -57,10 +57,7 @@ async fn tcp_proxy_roundtrip() -> Result<()> {
 
     // Create client endpoint.
     let client_key = SecretKey::generate(&mut rand::rng());
-    let client_endpoint = Endpoint::builder()
-        .secret_key(client_key)
-        .bind()
-        .await?;
+    let client_endpoint = Endpoint::builder().secret_key(client_key).bind().await?;
 
     let conn = client_endpoint.connect(server_addr, ALPN).await?;
 
@@ -104,10 +101,7 @@ async fn tcp_proxy_refused_port() -> Result<()> {
     });
 
     let client_key = SecretKey::generate(&mut rand::rng());
-    let client_endpoint = Endpoint::builder()
-        .secret_key(client_key)
-        .bind()
-        .await?;
+    let client_endpoint = Endpoint::builder().secret_key(client_key).bind().await?;
 
     let conn = client_endpoint.connect(server_addr, ALPN).await?;
     let (mut send, mut recv) = conn.open_bi().await?;
