@@ -43,6 +43,209 @@ OUT_PID=""
 TCP_IN_PID=""
 UDP_IN_PID=""
 
+dump_logs() {
+  local label="$1"
+  local path="$2"
+  if [[ -f "$path" && -s "$path" ]]; then
+    echo "--- ${label} ---" >&2
+    cat "$path" >&2
+  fi
+}
+
+dump_logs_and_fail() {
+  local message="$1"
+  shift
+  echo "$message" >&2
+  while (($# > 1)); do
+    dump_logs "$1" "$2"
+    shift 2
+  done
+  exit 1
+}
+
+process_is_alive() {
+  local pid="$1"
+  kill -0 "$pid" 2>/dev/null
+}
+
+stop_process() {
+  local pid_var="$1"
+  local pid="${!pid_var}"
+  if [[ -n "$pid" ]]; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    printf -v "$pid_var" '%s' ""
+  fi
+}
+
+wait_for_public_key() {
+  local pid="$1"
+  local log_path="$2"
+  local pubkey=""
+
+  for _ in $(seq 1 100); do
+    pubkey="$(sed -n 's/^public key: //p' "$log_path" | tail -n 1)"
+    if [[ -n "$pubkey" ]]; then
+      printf '%s\n' "$pubkey"
+      return 0
+    fi
+    if ! process_is_alive "$pid"; then
+      wait "$pid" 2>/dev/null || true
+      dump_logs_and_fail "punch out exited before becoming ready" "punch out" "$log_path"
+    fi
+    sleep 0.1
+  done
+
+  dump_logs_and_fail "failed to read public key from punch out" "punch out" "$log_path"
+}
+
+wait_for_tcp_listener() {
+  local pid="$1"
+  local log_path="$2"
+  local port="$3"
+
+  for _ in $(seq 1 100); do
+    if ! process_is_alive "$pid"; then
+      return 1
+    fi
+    if python3 - "$port" <<'PY' >/dev/null 2>&1
+import socket
+import sys
+
+sock = socket.socket()
+sock.settimeout(0.2)
+try:
+    sock.connect(("127.0.0.1", int(sys.argv[1])))
+except OSError:
+    raise SystemExit(1)
+else:
+    raise SystemExit(0)
+finally:
+    sock.close()
+PY
+    then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  return 1
+}
+
+start_tcp_mapping() {
+  local pubkey="$1"
+  local log_path="$2"
+
+  HOME="$TMP_HOME_IN" "$PUNCH_BIN" in "$pubkey" "$TCP_LOCAL_PORT:$TCP_ECHO_PORT" \
+    >/dev/null 2>"$log_path" &
+  TCP_IN_PID=$!
+}
+
+run_udp_probe() {
+  python3 - <<'PY'
+import socket
+import sys
+import time
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.bind(("127.0.0.1", 0))
+sock.settimeout(0.5)
+for i in range(20):
+    payload = f"udp-e2e-{i}".encode()
+    sock.sendto(payload, ("127.0.0.1", 44113))
+    try:
+        data, _ = sock.recvfrom(65536)
+        print(data.decode())
+        sys.exit(0)
+    except TimeoutError:
+        time.sleep(0.25)
+sys.exit(1)
+PY
+}
+
+wait_for_udp_mapping() {
+  local pid="$1"
+  local log_path="$2"
+
+  for _ in $(seq 1 5); do
+    if ! process_is_alive "$pid"; then
+      return 1
+    fi
+    if UDP_RESULT="$(run_udp_probe)"; then
+      if [[ "$UDP_RESULT" == udp-e2e-* ]]; then
+        printf '%s\n' "$UDP_RESULT"
+        return 0
+      fi
+      return 1
+    fi
+    sleep 0.5
+  done
+
+  return 1
+}
+
+start_udp_mapping() {
+  local pubkey="$1"
+  local log_path="$2"
+
+  HOME="$TMP_HOME_IN" "$PUNCH_BIN" in "$pubkey" "$UDP_LOCAL_PORT:$UDP_ECHO_PORT/udp" \
+    >/dev/null 2>"$log_path" &
+  UDP_IN_PID=$!
+}
+
+launch_tcp_until_ready() {
+  local pubkey="$1"
+  local log_path="$2"
+
+  for _ in $(seq 1 10); do
+    : >"$log_path"
+    start_tcp_mapping "$pubkey" "$log_path"
+    if wait_for_tcp_listener "$TCP_IN_PID" "$log_path" "$TCP_LOCAL_PORT"; then
+      return 0
+    fi
+    stop_process TCP_IN_PID
+    sleep 1
+  done
+
+  dump_logs_and_fail "tcp mapping never became ready" "punch in (tcp)" "$log_path"
+}
+
+launch_udp_until_ready() {
+  local pubkey="$1"
+  local log_path="$2"
+
+  for _ in $(seq 1 10); do
+    : >"$log_path"
+    start_udp_mapping "$pubkey" "$log_path"
+    if UDP_RESULT="$(wait_for_udp_mapping "$UDP_IN_PID" "$log_path")"; then
+      printf '%s\n' "$UDP_RESULT"
+      return 0
+    fi
+    stop_process UDP_IN_PID
+    sleep 1
+  done
+
+  dump_logs_and_fail "udp mapping never became ready" "punch in (udp)" "$log_path"
+}
+
+run_stdio_probe() {
+  local pubkey="$1"
+  local log_path="$2"
+  local output=""
+  local status=0
+
+  set +e
+  output="$(printf 'stdio-e2e' | HOME="$TMP_HOME_IN" "$PUNCH_BIN" in "$pubkey" -:43112 2>"$log_path")"
+  status=$?
+  set -e
+
+  if (( status != 0 )); then
+    dump_logs_and_fail "stdio smoke test failed with exit code $status" "stdio" "$log_path"
+  fi
+
+  printf '%s\n' "$output"
+}
+
 cleanup() {
   for pid in "$TCP_IN_PID" "$UDP_IN_PID" "$OUT_PID" "$SERVER_PID"; do
     if [[ -n "$pid" ]]; then
@@ -106,25 +309,9 @@ HOME="$TMP_HOME_OUT" "$PUNCH_BIN" out "$TCP_ECHO_PORT" "$TCP_STDIO_PORT" "$UDP_E
   >/dev/null 2>"$OUT_LOG" &
 OUT_PID=$!
 
-PUBKEY=""
-for _ in $(seq 1 100); do
-  PUBKEY="$(sed -n 's/^public key: //p' "$OUT_LOG" | tail -n 1)"
-  if [[ -n "$PUBKEY" ]]; then
-    break
-  fi
-  sleep 0.1
-done
+PUBKEY="$(wait_for_public_key "$OUT_PID" "$OUT_LOG")"
 
-if [[ -z "$PUBKEY" ]]; then
-  echo "failed to read public key from punch out" >&2
-  cat "$OUT_LOG" >&2
-  exit 1
-fi
-
-HOME="$TMP_HOME_IN" "$PUNCH_BIN" in "$PUBKEY" "$TCP_LOCAL_PORT:$TCP_ECHO_PORT" \
-  >/dev/null 2>"$TCP_IN_LOG" &
-TCP_IN_PID=$!
-sleep 2
+launch_tcp_until_ready "$PUBKEY" "$TCP_IN_LOG"
 
 TCP_RESULT="$(python3 - <<'PY'
 import socket
@@ -143,57 +330,23 @@ PY
 )"
 
 if [[ "$TCP_RESULT" != "tcp-e2e" ]]; then
-  echo "tcp smoke test failed: $TCP_RESULT" >&2
-  cat "$TCP_IN_LOG" >&2
-  exit 1
+  dump_logs_and_fail "tcp smoke test failed: $TCP_RESULT" "punch in (tcp)" "$TCP_IN_LOG"
 fi
 
-kill "$TCP_IN_PID" 2>/dev/null || true
-wait "$TCP_IN_PID" 2>/dev/null || true
-TCP_IN_PID=""
+stop_process TCP_IN_PID
 
-HOME="$TMP_HOME_IN" "$PUNCH_BIN" in "$PUBKEY" "$UDP_LOCAL_PORT:$UDP_ECHO_PORT/udp" \
-  >/dev/null 2>"$UDP_IN_LOG" &
-UDP_IN_PID=$!
-sleep 2
+UDP_RESULT="$(launch_udp_until_ready "$PUBKEY" "$UDP_IN_LOG")"
 
-UDP_RESULT="$(python3 - <<'PY'
-import socket
-import sys
-import time
-
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind(("127.0.0.1", 0))
-sock.settimeout(2)
-for i in range(5):
-    payload = f"udp-e2e-{i}".encode()
-    sock.sendto(payload, ("127.0.0.1", 44113))
-    try:
-        data, _ = sock.recvfrom(65536)
-        print(data.decode())
-        sys.exit(0)
-    except TimeoutError:
-        time.sleep(1)
-sys.exit(1)
-PY
-)"
-
-if [[ "$UDP_RESULT" != "udp-e2e-0" ]]; then
-  echo "udp smoke test failed: $UDP_RESULT" >&2
-  cat "$UDP_IN_LOG" >&2
-  exit 1
+if [[ "$UDP_RESULT" != udp-e2e-* ]]; then
+  dump_logs_and_fail "udp smoke test failed: $UDP_RESULT" "punch in (udp)" "$UDP_IN_LOG"
 fi
 
-kill "$UDP_IN_PID" 2>/dev/null || true
-wait "$UDP_IN_PID" 2>/dev/null || true
-UDP_IN_PID=""
+stop_process UDP_IN_PID
 
-STDIO_RESULT="$(printf 'stdio-e2e' | HOME="$TMP_HOME_IN" "$PUNCH_BIN" in "$PUBKEY" -:43112 2>"$STDIO_LOG")"
+STDIO_RESULT="$(run_stdio_probe "$PUBKEY" "$STDIO_LOG")"
 
 if [[ "$STDIO_RESULT" != "stdio-e2e" ]]; then
-  echo "stdio smoke test failed: $STDIO_RESULT" >&2
-  cat "$STDIO_LOG" >&2
-  exit 1
+  dump_logs_and_fail "stdio smoke test failed: $STDIO_RESULT" "stdio" "$STDIO_LOG"
 fi
 
 echo "smoke e2e passed"
