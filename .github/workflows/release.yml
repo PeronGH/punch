@@ -96,17 +96,15 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ needs.prepare.outputs.tag }}"
-          package_dir="punch-${tag}-${{ matrix.artifact_name }}"
-          mkdir -p "dist/${package_dir}"
-          cp target/release/punch "dist/${package_dir}/punch"
-          cp README.md LICENSE "dist/${package_dir}/"
-          tar -C dist -czf "dist/${package_dir}.tar.gz" "${package_dir}"
+          binary_name="punch-${tag}-${{ matrix.artifact_name }}"
+          mkdir -p dist
+          install -m 0755 target/release/punch "dist/${binary_name}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           name: release-${{ matrix.artifact_name }}
-          path: dist/*.tar.gz
+          path: dist/punch-*
 
   publish:
     needs:
@@ -129,7 +127,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh release create "${{ needs.prepare.outputs.tag }}" release-artifacts/*.tar.gz \
+          gh release create "${{ needs.prepare.outputs.tag }}" release-artifacts/punch-* \
             --target "${{ needs.prepare.outputs.sha }}" \
             --title "${{ needs.prepare.outputs.tag }}" \
             --generate-notes
