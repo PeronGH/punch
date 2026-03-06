@@ -4,6 +4,7 @@ use anyhow::{bail, Result};
 use iroh::endpoint::Connection;
 use iroh::{Endpoint, EndpointId, SecretKey};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::task::JoinSet;
 
 const ALPN: &[u8] = b"punch/0";
 
@@ -19,23 +20,19 @@ pub async fn run(
 
     let conn = endpoint.connect(endpoint_id, ALPN).await?;
 
-    let mut tasks = Vec::new();
+    let mut tasks = JoinSet::new();
     for mapping in mappings {
         let conn = conn.clone();
-        tasks.push(tokio::spawn(async move {
-            run_listener(conn, mapping).await
-        }));
+        tasks.spawn(async move { run_listener(conn, mapping).await });
     }
 
     // Exit on connection loss or listener failure.
     tokio::select! {
         _ = conn.closed() => bail!("connection to remote peer lost"),
-        result = async {
-            for task in tasks {
-                task.await??;
-            }
-            Ok::<_, anyhow::Error>(())
-        } => result,
+        result = tasks.join_next() => match result {
+            Some(result) => result?,
+            None => Ok(()),
+        },
     }
 }
 
