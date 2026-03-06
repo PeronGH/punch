@@ -16,7 +16,8 @@ One side runs `punch out` to expose local services. The other side runs `punch i
 cargo build --release
 ```
 
-Prebuilt binaries for Linux amd64, Linux arm64, and macOS arm64 are published on GitHub Releases as rolling tags `v1`, `v2`, `v3`, and so on.
+Download the latest prebuilt binaries for Linux amd64, Linux arm64, and macOS arm64 from the latest GitHub release:
+https://github.com/PeronGH/punch/releases/latest
 
 ## Identity
 

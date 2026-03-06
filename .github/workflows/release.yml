@@ -95,8 +95,7 @@ jobs:
       - name: Package artifact
         run: |
           set -euo pipefail
-          tag="${{ needs.prepare.outputs.tag }}"
-          binary_name="punch-${tag}-${{ matrix.artifact_name }}"
+          binary_name="punch-${{ matrix.artifact_name }}"
           mkdir -p dist
           install -m 0755 target/release/punch "dist/${binary_name}"
 
