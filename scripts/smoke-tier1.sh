@@ -66,6 +66,11 @@ stop_process() {
   fi
 }
 
+process_is_alive() {
+  local pid="$1"
+  kill -0 "$pid" 2>/dev/null
+}
+
 cleanup() {
   stop_process TCP_IN_PID
   stop_process OUT_PID
@@ -129,19 +134,25 @@ if [[ -z "$PUBKEY" ]]; then
   fail "tier1: timed out waiting for punch out public key"
 fi
 
-announce "start punch in tcp mapping"
-HOME="$TMP_HOME_IN" "$PUNCH_BIN" in "$PUBKEY" "$TCP_LOCAL_PORT:$TCP_ECHO_PORT" \
-  >/dev/null 2>"$TCP_IN_LOG" &
-TCP_IN_PID=$!
+start_tcp_mapping() {
+  local pubkey="$1"
+  local log_path="$2"
 
-for attempt in $(seq 1 100); do
-  if ! kill -0 "$TCP_IN_PID" 2>/dev/null; then
-    wait "$TCP_IN_PID" 2>/dev/null || true
-    fail "tier1: punch in exited before tcp listener was ready"
-  fi
+  HOME="$TMP_HOME_IN" "$PUNCH_BIN" in "$pubkey" "$TCP_LOCAL_PORT:$TCP_ECHO_PORT" \
+    >/dev/null 2>"$log_path" &
+  TCP_IN_PID=$!
+}
 
-  announce "wait for tcp listener attempt ${attempt}"
-  if python3 - <<'PY' >/dev/null 2>&1
+wait_for_tcp_listener() {
+  local pid="$1"
+
+  for attempt in $(seq 1 100); do
+    if ! process_is_alive "$pid"; then
+      return 1
+    fi
+
+    announce "wait for tcp listener attempt ${attempt}"
+    if python3 - <<'PY' >/dev/null 2>&1
 import socket
 
 sock = socket.socket()
@@ -155,13 +166,32 @@ else:
 finally:
     sock.close()
 PY
-  then
+    then
+      return 0
+    fi
+
+    sleep 0.1
+  done
+
+  return 1
+}
+
+announce "start punch in tcp mapping"
+for attempt in $(seq 1 10); do
+  : >"$TCP_IN_LOG"
+  announce "tcp launch attempt ${attempt}"
+  start_tcp_mapping "$PUBKEY" "$TCP_IN_LOG"
+  if wait_for_tcp_listener "$TCP_IN_PID"; then
     announce "tcp listener ready"
     break
   fi
-
-  sleep 0.1
+  stop_process TCP_IN_PID
+  sleep 1
 done
+
+if [[ -z "$TCP_IN_PID" ]]; then
+  fail "tier1: tcp mapping never became ready"
+fi
 
 TCP_RESULT="$(python3 - <<'PY'
 import socket
