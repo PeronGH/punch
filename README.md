@@ -7,7 +7,7 @@ One side runs `punch out` to expose local services. The other side runs `punch i
 ## Current behavior
 
 - TCP and UDP port mappings are implemented.
-- Stdio mode such as `-:22` is not implemented.
+- TCP stdio mode such as `-:22` is implemented.
 - Both peers must run `punch`.
 
 ## Build
@@ -45,7 +45,9 @@ Port format:
 Mapping format:
 
 - `<local>:<remote>` or `<local>:<remote>/<proto>`
+- `-:<remote>` or `-:<remote>/tcp` for stdio mode
 - `local` is the port opened on the machine running `punch in`
+- `-` means use stdin/stdout instead of opening a local listener
 - `remote` is the port reached on `127.0.0.1` on the machine running `punch out`
 - bare mappings default to `tcp`
 
@@ -80,6 +82,18 @@ Connect to it locally on port `5300`:
 ```bash
 punch in <pubkey> 5300:53/udp
 ```
+
+Use stdio to reach a remote SSH service on port `22`:
+
+```bash
+punch out 22
+```
+
+```bash
+punch in <pubkey> -:22
+```
+
+This connects stdin/stdout directly to the remote peer's `127.0.0.1:22`.
 
 Multiple mappings in one process:
 
