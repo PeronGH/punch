@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    outputs:
+      skip: ${{ steps.prepare.outputs.skip }}
+      tag: ${{ steps.prepare.outputs.tag }}
+      sha: ${{ steps.prepare.outputs.sha }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Determine release tag
+        id: prepare
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
+          sha="${{ github.event.workflow_run.head_sha }}"
+          existing_tag="$(git tag --points-at "$sha" | grep -E '^v[0-9]+$' | head -n 1 || true)"
+          if [[ -n "$existing_tag" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$existing_tag" >> "$GITHUB_OUTPUT"
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          max_tag=0
+          while IFS= read -r tag; do
+            [[ "$tag" =~ ^v([0-9]+)$ ]] || continue
+            number="${BASH_REMATCH[1]}"
+            if (( number > max_tag )); then
+              max_tag="$number"
+            fi
+          done < <(git tag --list 'v*')
+
+          next_tag="v$((max_tag + 1))"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "tag=$next_tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.skip == 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            artifact_name: linux-amd64
+          - runner: ubuntu-24.04-arm
+            artifact_name: linux-arm64
+          - runner: macos-14
+            artifact_name: darwin-arm64
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Build release binary
+        run: cargo build --locked --release
+
+      - name: Package artifact
+        run: |
+          set -euo pipefail
+          tag="${{ needs.prepare.outputs.tag }}"
+          package_dir="punch-${tag}-${{ matrix.artifact_name }}"
+          mkdir -p "dist/${package_dir}"
+          cp target/release/punch "dist/${package_dir}/punch"
+          cp README.md LICENSE "dist/${package_dir}/"
+          tar -C dist -czf "dist/${package_dir}.tar.gz" "${package_dir}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-${{ matrix.artifact_name }}
+          path: dist/*.tar.gz
+
+  publish:
+    needs:
+      - prepare
+      - build
+    if: needs.prepare.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v5
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release-artifacts
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ needs.prepare.outputs.tag }}" release-artifacts/*.tar.gz \
+            --target "${{ needs.prepare.outputs.sha }}" \
+            --title "${{ needs.prepare.outputs.tag }}" \
+            --generate-notes

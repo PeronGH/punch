@@ -16,6 +16,8 @@ One side runs `punch out` to expose local services. The other side runs `punch i
 cargo build --release
 ```
 
+Prebuilt archives for Linux amd64, Linux arm64, and macOS arm64 are published on GitHub Releases as rolling tags `v1`, `v2`, `v3`, and so on.
+
 ## Identity
 
 - The secret key is stored at `~/.local/share/punch/secret.key`.
