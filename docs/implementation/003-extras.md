@@ -31,6 +31,8 @@ Stdio mapping must coexist with port mappings in the same invocation. The stdio 
 
 Stdin and stdout must be used in raw byte mode. No line buffering, no newline translation. This is required for `ProxyCommand` compatibility with SSH.
 
+If stdin is attached to a TTY, punch must place that terminal into raw mode for the duration of the stdio bridge and restore the original terminal settings before exit. If stdin is not a TTY, stdin and stdout are used directly as byte streams without terminal-mode changes.
+
 ## Error Contracts
 
 - Stdio I/O errors → exit with non-zero status.

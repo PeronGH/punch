@@ -1,4 +1,4 @@
-use crate::parse::{Mapping, Protocol};
+use crate::parse::{LocalTarget, Mapping, Protocol};
 use crate::proxy;
 use crate::udp;
 use anyhow::{Result, bail};
@@ -31,19 +31,21 @@ pub(crate) async fn run_connection(conn: Connection, mappings: Vec<Mapping>) -> 
     let mut udp_mappings = Vec::new();
 
     for mapping in mappings {
-        match mapping.protocol {
-            Protocol::Tcp => {
+        match (mapping.local, mapping.protocol) {
+            (LocalTarget::Port(_), Protocol::Tcp) => {
                 let conn = conn.clone();
                 tasks.spawn(async move { run_listener(conn, mapping).await });
             }
-            Protocol::Udp => {
-                let socket = Arc::new(UdpSocket::bind(("127.0.0.1", mapping.local)).await?);
+            (LocalTarget::Port(local_port), Protocol::Udp) => {
+                let socket = Arc::new(UdpSocket::bind(("127.0.0.1", local_port)).await?);
                 udp_mappings.push(UdpMappingState {
-                    local_port: mapping.local,
+                    local_port,
                     remote_port: mapping.remote,
                     socket,
                 });
             }
+            (LocalTarget::Stdio, Protocol::Tcp) => bail!("stdio mappings are not supported yet"),
+            (LocalTarget::Stdio, Protocol::Udp) => unreachable!("udp stdio mappings are rejected during parsing"),
         }
     }
 
@@ -70,7 +72,11 @@ pub(crate) async fn run_connection(conn: Connection, mappings: Vec<Mapping>) -> 
 }
 
 async fn run_listener(conn: Connection, mapping: Mapping) -> Result<()> {
-    let listener = TcpListener::bind(("127.0.0.1", mapping.local)).await?;
+    let LocalTarget::Port(local_port) = mapping.local else {
+        bail!("stdio mappings are not supported yet");
+    };
+
+    let listener = TcpListener::bind(("127.0.0.1", local_port)).await?;
     loop {
         let (tcp, _) = listener.accept().await?;
         let conn = conn.clone();

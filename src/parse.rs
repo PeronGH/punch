@@ -75,8 +75,15 @@ impl FromStr for PortSpec {
 
 /// A local:remote port mapping for `punch in`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LocalTarget {
+    Port(u16),
+    Stdio,
+}
+
+/// A local:remote port mapping for `punch in`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Mapping {
-    pub local: u16,
+    pub local: LocalTarget,
     pub remote: u16,
     pub protocol: Protocol,
 }
@@ -88,15 +95,17 @@ impl FromStr for Mapping {
         let (l, r) = s
             .split_once(':')
             .context("mapping must be <local>:<remote>")?;
-        if l == "-" {
-            bail!("stdio mappings are not supported yet");
-        }
-
-        let local: Port = l.parse().context("invalid local port")?;
+        let local = match l {
+            "-" => LocalTarget::Stdio,
+            _ => LocalTarget::Port(l.parse::<Port>().context("invalid local port")?.get()),
+        };
         let (remote, protocol) = split_protocol_suffix(r)?;
+        if local == LocalTarget::Stdio && protocol == Protocol::Udp {
+            bail!("stdio mappings must use tcp");
+        }
         let remote: Port = remote.parse().context("invalid remote port")?;
         Ok(Mapping {
-            local: local.get(),
+            local,
             remote: remote.get(),
             protocol,
         })
@@ -124,8 +133,15 @@ pub fn parse_ports(args: &[String]) -> Result<Vec<PortSpec>> {
 
 pub fn parse_mappings(args: &[String]) -> Result<Vec<Mapping>> {
     let mut mappings = Vec::with_capacity(args.len());
+    let mut stdio_count = 0usize;
     for arg in args {
         let mapping: Mapping = arg.parse()?;
+        if mapping.local == LocalTarget::Stdio {
+            stdio_count += 1;
+            if stdio_count > 1 {
+                bail!("at most one stdio mapping is allowed");
+            }
+        }
         mappings.push(mapping);
     }
     Ok(mappings)
@@ -180,7 +196,7 @@ mod tests {
     #[test]
     fn mapping_valid() {
         let m: Mapping = "4000:8080".parse().unwrap();
-        assert_eq!(m.local, 4000);
+        assert_eq!(m.local, LocalTarget::Port(4000));
         assert_eq!(m.remote, 8080);
         assert_eq!(m.protocol, Protocol::Tcp);
     }
@@ -188,9 +204,17 @@ mod tests {
     #[test]
     fn mapping_udp_valid() {
         let m: Mapping = "5300:53/udp".parse().unwrap();
-        assert_eq!(m.local, 5300);
+        assert_eq!(m.local, LocalTarget::Port(5300));
         assert_eq!(m.remote, 53);
         assert_eq!(m.protocol, Protocol::Udp);
+    }
+
+    #[test]
+    fn mapping_stdio_valid() {
+        let m: Mapping = "-:22".parse().unwrap();
+        assert_eq!(m.local, LocalTarget::Stdio);
+        assert_eq!(m.remote, 22);
+        assert_eq!(m.protocol, Protocol::Tcp);
     }
 
     #[test]
@@ -199,7 +223,20 @@ mod tests {
         assert!("80".parse::<Mapping>().is_err());
         assert!("abc:80".parse::<Mapping>().is_err());
         assert!("80:0".parse::<Mapping>().is_err());
-        assert!("-:22".parse::<Mapping>().is_err());
+        assert!("-:22/udp".parse::<Mapping>().is_err());
         assert!("5300:53/sctp".parse::<Mapping>().is_err());
+    }
+
+    #[test]
+    fn parse_mappings_rejects_multiple_stdio_mappings() {
+        let args: Vec<String> = vec!["-:22".into(), "-:80".into()];
+        assert!(parse_mappings(&args).is_err());
+    }
+
+    #[test]
+    fn parse_mappings_allows_mixed_stdio_and_listener_mappings() {
+        let args: Vec<String> = vec!["-:22".into(), "3000:8080".into(), "5300:53/udp".into()];
+        let mappings = parse_mappings(&args).unwrap();
+        assert_eq!(mappings.len(), 3);
     }
 }
