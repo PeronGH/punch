@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [[ "${1:-}" == "--help" ]]; then
   cat <<'EOF'
-Usage: scripts/smoke-tier2.sh
+Usage: scripts/smoke-e2e.sh
 
 Runs the full same-machine end-to-end smoke checks:
   - TCP listener mapping
@@ -44,7 +44,7 @@ TCP_IN_PID=""
 UDP_IN_PID=""
 
 announce() {
-  echo "tier2: $*" >&2
+  echo "e2e: $*" >&2
 }
 
 dump_logs() {
@@ -106,8 +106,7 @@ wait_for_public_key() {
 
 wait_for_tcp_listener() {
   local pid="$1"
-  local log_path="$2"
-  local port="$3"
+  local port="$2"
 
   for _ in $(seq 1 100); do
     announce "wait for tcp listener"
@@ -172,7 +171,6 @@ PY
 
 wait_for_udp_mapping() {
   local pid="$1"
-  local log_path="$2"
 
   for _ in $(seq 1 5); do
     announce "wait for udp mapping"
@@ -210,7 +208,7 @@ launch_tcp_until_ready() {
     announce "tcp launch attempt ${attempt}"
     : >"$log_path"
     start_tcp_mapping "$pubkey" "$log_path"
-    if wait_for_tcp_listener "$TCP_IN_PID" "$log_path" "$TCP_LOCAL_PORT"; then
+    if wait_for_tcp_listener "$TCP_IN_PID" "$TCP_LOCAL_PORT"; then
       return 0
     fi
     stop_process TCP_IN_PID
@@ -228,7 +226,7 @@ launch_udp_until_ready() {
     announce "udp launch attempt ${attempt}"
     : >"$log_path"
     start_udp_mapping "$pubkey" "$log_path"
-    if UDP_RESULT="$(wait_for_udp_mapping "$UDP_IN_PID" "$log_path")"; then
+    if UDP_RESULT="$(wait_for_udp_mapping "$UDP_IN_PID")"; then
       printf '%s\n' "$UDP_RESULT"
       return 0
     fi
@@ -375,4 +373,4 @@ if [[ "$STDIO_RESULT" != "stdio-e2e" ]]; then
 fi
 
 announce "stdio phase passed"
-echo "tier2: success"
+echo "e2e: success"

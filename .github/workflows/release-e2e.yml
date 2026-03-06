@@ -1,8 +1,9 @@
-name: Tier 2 Smoke
+name: Release E2E
 
 on:
   release:
     types:
+      - prereleased
       - published
 
 permissions:
@@ -12,6 +13,9 @@ jobs:
   smoke:
     if: github.event.release.prerelease == true
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
 
     steps:
       - name: Check out repository
@@ -29,7 +33,17 @@ jobs:
             --dir dist
           chmod +x dist/punch-linux-amd64
 
-      - name: Run tier 2 smoke test
+      - name: Run E2E smoke test
         env:
           PUNCH_BIN: dist/punch-linux-amd64
-        run: ./scripts/smoke-tier2.sh
+        run: ./scripts/smoke-e2e.sh
+
+      - name: Promote release to latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release edit "${{ github.event.release.tag_name }}" \
+            --prerelease=false \
+            --latest

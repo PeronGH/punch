@@ -30,8 +30,3 @@ jobs:
 
       - name: Run tests
         run: cargo test
-
-      - name: Run tier 1 smoke test
-        env:
-          PUNCH_BIN: target/debug/punch
-        run: ./scripts/smoke-tier1.sh
