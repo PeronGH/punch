@@ -15,7 +15,7 @@ permissions:
 jobs:
   smoke:
     if: github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
 
     permissions:
       contents: write
@@ -40,20 +40,28 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Download prerelease Linux binary
+        id: bin
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          case "$(uname -m)" in
+            x86_64)  arch=amd64 ;;
+            aarch64) arch=arm64 ;;
+            *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
+          esac
+          name="punch-linux-${arch}"
           mkdir -p dist
           gh release download "${{ steps.tag.outputs.tag }}" \
-            --pattern 'punch-linux-amd64' \
+            --pattern "$name" \
             --dir dist
-          chmod +x dist/punch-linux-amd64
+          chmod +x "dist/${name}"
+          echo "path=dist/${name}" >> "$GITHUB_OUTPUT"
 
       - name: Run E2E smoke test
         env:
-          PUNCH_BIN: dist/punch-linux-amd64
+          PUNCH_BIN: ${{ steps.bin.outputs.path }}
         run: ./scripts/smoke-e2e.sh
 
       - name: Promote release to latest

@@ -19,7 +19,7 @@ concurrency:
 jobs:
   prepare:
     if: github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
 
     outputs:
       skip: ${{ steps.prepare.outputs.skip }}
@@ -110,7 +110,7 @@ jobs:
       - prepare
       - build
     if: needs.prepare.outputs.skip == 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
 
     steps:
       - name: Download artifacts
