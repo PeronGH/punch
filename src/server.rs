@@ -2,6 +2,7 @@ use crate::parse::{PortSpec, Protocol};
 use crate::proxy;
 use crate::udp;
 use anyhow::{Result, bail};
+use iroh::endpoint::presets;
 use iroh::endpoint::{Connection, Incoming, RecvStream, SendStream};
 use iroh::{Endpoint, SecretKey};
 use std::collections::HashMap;
@@ -42,7 +43,7 @@ impl AllowedPorts {
 }
 
 pub async fn run(ports: Vec<PortSpec>, secret_key: SecretKey) -> Result<()> {
-    let endpoint = Endpoint::builder()
+    let endpoint = Endpoint::builder(presets::N0)
         .secret_key(secret_key)
         .alpns(vec![ALPN.to_vec()])
         .bind()

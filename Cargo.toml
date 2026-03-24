@@ -7,7 +7,7 @@ edition = "2024"
 anyhow = "1.0.102"
 clap = { version = "4.5.60", features = ["derive"] }
 dirs = "6.0.0"
-iroh = "0.96.1"
+iroh = "0.97.0"
 nix = { version = "0.31.2", features = ["fs", "term"] }
 rand = "0.9"
 tokio = { version = "1.49.0", features = ["full"] }

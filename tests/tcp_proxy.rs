@@ -1,4 +1,5 @@
 use anyhow::Result;
+use iroh::endpoint::presets;
 use iroh::endpoint::{RecvStream, SendStream};
 use iroh::{Endpoint, SecretKey};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -26,7 +27,7 @@ async fn tcp_proxy_roundtrip() -> Result<()> {
 
     // Create server endpoint (accepts connections).
     let server_key = SecretKey::generate(&mut rand::rng());
-    let server_endpoint = Endpoint::builder()
+    let server_endpoint = Endpoint::builder(presets::N0)
         .secret_key(server_key)
         .alpns(vec![ALPN.to_vec()])
         .bind()
@@ -57,7 +58,10 @@ async fn tcp_proxy_roundtrip() -> Result<()> {
 
     // Create client endpoint.
     let client_key = SecretKey::generate(&mut rand::rng());
-    let client_endpoint = Endpoint::builder().secret_key(client_key).bind().await?;
+    let client_endpoint = Endpoint::builder(presets::N0)
+        .secret_key(client_key)
+        .bind()
+        .await?;
 
     let conn = client_endpoint.connect(server_addr, ALPN).await?;
 
@@ -82,7 +86,7 @@ async fn tcp_proxy_roundtrip() -> Result<()> {
 #[tokio::test]
 async fn tcp_proxy_refused_port() -> Result<()> {
     let server_key = SecretKey::generate(&mut rand::rng());
-    let server_endpoint = Endpoint::builder()
+    let server_endpoint = Endpoint::builder(presets::N0)
         .secret_key(server_key)
         .alpns(vec![ALPN.to_vec()])
         .bind()
@@ -101,7 +105,10 @@ async fn tcp_proxy_refused_port() -> Result<()> {
     });
 
     let client_key = SecretKey::generate(&mut rand::rng());
-    let client_endpoint = Endpoint::builder().secret_key(client_key).bind().await?;
+    let client_endpoint = Endpoint::builder(presets::N0)
+        .secret_key(client_key)
+        .bind()
+        .await?;
 
     let conn = client_endpoint.connect(server_addr, ALPN).await?;
     let (mut send, mut recv) = conn.open_bi().await?;

@@ -4,6 +4,7 @@ use crate::stdio::StdioHandles;
 use crate::udp;
 use anyhow::{Context, Result, bail};
 use iroh::endpoint::Connection;
+use iroh::endpoint::presets;
 use iroh::{Endpoint, EndpointId, SecretKey};
 use std::collections::HashMap;
 use std::future::Future;
@@ -21,7 +22,10 @@ pub async fn run(
     mappings: Vec<Mapping>,
     secret_key: SecretKey,
 ) -> Result<()> {
-    let endpoint = Endpoint::builder().secret_key(secret_key).bind().await?;
+    let endpoint = Endpoint::builder(presets::N0)
+        .secret_key(secret_key)
+        .bind()
+        .await?;
 
     let conn = endpoint.connect(endpoint_id, ALPN).await?;
     run_connection(conn, mappings).await
@@ -310,6 +314,7 @@ mod tests {
     use crate::stdio::StdioHandles;
     use crate::udp;
     use anyhow::Result;
+    use iroh::endpoint::presets;
     use iroh::{Endpoint, SecretKey};
     use std::net::{Ipv4Addr, SocketAddr};
     use std::time::{Duration, Instant};
@@ -338,7 +343,7 @@ mod tests {
         allowed: AllowedPorts,
     ) -> Result<(Endpoint, tokio::task::JoinHandle<()>)> {
         let server_key = SecretKey::generate(&mut rand::rng());
-        let server_endpoint = Endpoint::builder()
+        let server_endpoint = Endpoint::builder(presets::N0)
             .secret_key(server_key)
             .alpns(vec![super::ALPN.to_vec()])
             .bind()
@@ -419,7 +424,7 @@ mod tests {
         });
 
         let server_key = SecretKey::generate(&mut rand::rng());
-        let server_endpoint = Endpoint::builder()
+        let server_endpoint = Endpoint::builder(presets::N0)
             .secret_key(server_key)
             .alpns(vec![super::ALPN.to_vec()])
             .bind()
@@ -435,7 +440,10 @@ mod tests {
         });
 
         let client_key = SecretKey::generate(&mut rand::rng());
-        let client_endpoint = Endpoint::builder().secret_key(client_key).bind().await?;
+        let client_endpoint = Endpoint::builder(presets::N0)
+            .secret_key(client_key)
+            .bind()
+            .await?;
 
         let conn = client_endpoint.connect(server_addr, super::ALPN).await?;
 
@@ -486,7 +494,10 @@ mod tests {
         let (server_endpoint, server_task) = spawn_remote_server(allowed).await?;
 
         let client_key = SecretKey::generate(&mut rand::rng());
-        let client_endpoint = Endpoint::builder().secret_key(client_key).bind().await?;
+        let client_endpoint = Endpoint::builder(presets::N0)
+            .secret_key(client_key)
+            .bind()
+            .await?;
         let conn = client_endpoint
             .connect(server_endpoint.addr(), super::ALPN)
             .await?;
@@ -523,7 +534,10 @@ mod tests {
         let (server_endpoint, server_task) = spawn_remote_server(allowed).await?;
 
         let client_key = SecretKey::generate(&mut rand::rng());
-        let client_endpoint = Endpoint::builder().secret_key(client_key).bind().await?;
+        let client_endpoint = Endpoint::builder(presets::N0)
+            .secret_key(client_key)
+            .bind()
+            .await?;
         let conn = client_endpoint
             .connect(server_endpoint.addr(), super::ALPN)
             .await?;
@@ -559,7 +573,10 @@ mod tests {
         let (server_endpoint, server_task) = spawn_remote_server(allowed).await?;
 
         let client_key = SecretKey::generate(&mut rand::rng());
-        let client_endpoint = Endpoint::builder().secret_key(client_key).bind().await?;
+        let client_endpoint = Endpoint::builder(presets::N0)
+            .secret_key(client_key)
+            .bind()
+            .await?;
         let conn = client_endpoint
             .connect(server_endpoint.addr(), super::ALPN)
             .await?;
